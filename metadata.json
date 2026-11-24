@@ -1,0 +1,6 @@
+{
+  "name": "Remera EcoCare",
+  "description": "Smart Hygiene, Cleanliness and Environmental Management System for Remera Sector, Kigali, Rwanda.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

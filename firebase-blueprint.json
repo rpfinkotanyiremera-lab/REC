@@ -1,0 +1,438 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user account and RBAC role assignment for Remera EcoCare (contains PII, isolated to owner and admins).",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified account email address",
+          "minLength": 5,
+          "maxLength": 160
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Official full name of the staff member",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "phone": {
+          "type": "string",
+          "description": "Contact telephone number",
+          "maxLength": 30
+        },
+        "role": {
+          "type": "string",
+          "description": "Assigned institutional role",
+          "enum": ["admin", "team_leader", "hso"]
+        },
+        "status": {
+          "type": "string",
+          "description": "Account activation status",
+          "enum": ["active", "inactive", "pending"]
+        },
+        "assignedCell": {
+          "type": "string",
+          "description": "Assigned administrative cell within Remera Sector",
+          "maxLength": 80
+        },
+        "assignedVillage": {
+          "type": "string",
+          "description": "Assigned village within the cell",
+          "maxLength": 80
+        },
+        "teamName": {
+          "type": "string",
+          "description": "Assigned hygiene team name",
+          "maxLength": 80
+        },
+        "provisionedAccountId": {
+          "type": "string",
+          "description": "Optional ID of claimed provisionedAccounts document",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp"
+        }
+      },
+      "required": [
+        "uid",
+        "email",
+        "fullName",
+        "phone",
+        "role",
+        "status",
+        "assignedCell",
+        "assignedVillage",
+        "teamName",
+        "provisionedAccountId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminMarker": {
+      "title": "AdminMarker",
+      "description": "Authoritative admin role lookup document keyed by UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "grantedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "grantedAt"]
+    },
+    "ProvisionedAccount": {
+      "title": "ProvisionedAccount",
+      "description": "Admin pre-registered account invitation linking an institutional email to a role and assigned cell prior to first Google sign-in.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 5,
+          "maxLength": 160
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "team_leader", "hso"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "inactive"]
+        },
+        "assignedCell": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "assignedVillage": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "teamName": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "claimedUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "email",
+        "fullName",
+        "phone",
+        "role",
+        "status",
+        "assignedCell",
+        "assignedVillage",
+        "teamName",
+        "claimedUid",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "StaffDirectoryEntry": {
+      "title": "StaffDirectoryEntry",
+      "description": "Non-PII institutional staff directory entry for sector coordination and dashboard metrics.",
+      "type": "object",
+      "properties": {
+        "entryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "team_leader", "hso"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "inactive", "pending"]
+        },
+        "assignedCell": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "assignedVillage": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "teamName": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "sectorCode": {
+          "type": "string",
+          "enum": ["remera"]
+        },
+        "isClaimed": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "entryId",
+        "fullName",
+        "role",
+        "status",
+        "assignedCell",
+        "assignedVillage",
+        "teamName",
+        "sectorCode",
+        "isClaimed",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Sector-level hygiene announcement or operational directive published by an Admin.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 140
+        },
+        "message": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 2000
+        },
+        "targetAudience": {
+          "type": "string",
+          "enum": ["all", "team_leaders", "hso"]
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["normal", "urgent"]
+        },
+        "sectorCode": {
+          "type": "string",
+          "enum": ["remera"]
+        },
+        "authorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "title",
+        "message",
+        "targetAudience",
+        "priority",
+        "sectorCode",
+        "authorId",
+        "authorName",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable operational audit record for role assignments, registrations, and system actions.",
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 300
+        },
+        "actorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "actorName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "actorRole": {
+          "type": "string",
+          "enum": ["admin", "team_leader", "hso"]
+        },
+        "targetEntity": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "sectorCode": {
+          "type": "string",
+          "enum": ["remera"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "action",
+        "summary",
+        "actorId",
+        "actorName",
+        "actorRole",
+        "targetEntity",
+        "sectorCode",
+        "createdAt"
+      ]
+    },
+    "SectorCell": {
+      "title": "SectorCell",
+      "description": "Administrative Cell within Remera Sector supporting Phase 1 team-location mapping and Phase 2 expansion.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "code": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 24,
+          "pattern": "^[A-Z0-9_-]+$"
+        },
+        "villageCount": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "inactive"]
+        },
+        "sectorCode": {
+          "type": "string",
+          "enum": ["remera"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "name",
+        "code",
+        "villageCount",
+        "status",
+        "sectorCode",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Authenticated user accounts and private PII (accessible only by the owner or an Admin)."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminMarker" },
+      "description": "Authoritative Admin UID registry used for fast, non-cyclic RBAC lookups."
+    },
+    "/provisionedAccounts/{accountId}": {
+      "schema": { "$ref": "#/entities/ProvisionedAccount" },
+      "description": "Admin pre-registered user accounts keyed by deterministic email identifier."
+    },
+    "/staffDirectory/{entryId}": {
+      "schema": { "$ref": "#/entities/StaffDirectoryEntry" },
+      "description": "Non-PII staff roster for sector-wide dashboards and role counts."
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/Announcement" },
+      "description": "Sector announcements published by Administrators."
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable activity and governance log."
+    },
+    "/sectorCells/{cellId}": {
+      "schema": { "$ref": "#/entities/SectorCell" },
+      "description": "Remera Sector administrative cells foundation."
+    }
+  }
+}

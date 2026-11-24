@@ -1,0 +1,461 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Global Helpers
+    // -------------------------------------------------------------------------
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isBootstrapAdminEmail() {
+      return isVerified() && request.auth.token.email == 'rpfinkotanyiremera@gmail.com';
+    }
+
+    function isAdmin() {
+      return isVerified() && (
+        isBootstrapAdminEmail() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isActiveStaff() {
+      return isVerified() && (
+        isBootstrapAdminEmail() ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active'
+        )
+      );
+    }
+
+    function isValidRole(role) {
+      return role in ['admin', 'team_leader', 'hso'];
+    }
+
+    function isValidUserStatus(status) {
+      return status in ['active', 'inactive', 'pending'];
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation Blueprints
+    // -------------------------------------------------------------------------
+    function isValidUser(data) {
+      return data.keys().hasAll([
+          'uid', 'email', 'fullName', 'phone', 'role', 'status',
+          'assignedCell', 'assignedVillage', 'teamName', 'provisionedAccountId',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'email', 'fullName', 'phone', 'role', 'status',
+          'assignedCell', 'assignedVillage', 'teamName', 'provisionedAccountId',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.email is string && data.email.size() >= 5 && data.email.size() <= 160 &&
+        data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100 &&
+        data.phone is string && data.phone.size() <= 30 &&
+        isValidRole(data.role) &&
+        isValidUserStatus(data.status) &&
+        data.assignedCell is string && data.assignedCell.size() <= 80 &&
+        data.assignedVillage is string && data.assignedVillage.size() <= 80 &&
+        data.teamName is string && data.teamName.size() <= 80 &&
+        data.provisionedAccountId is string && data.provisionedAccountId.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function matchesProvisionedAccount(data) {
+      return isValidId(data.provisionedAccountId) &&
+        exists(/databases/$(database)/documents/provisionedAccounts/$(data.provisionedAccountId)) &&
+        get(/databases/$(database)/documents/provisionedAccounts/$(data.provisionedAccountId)).data.email == request.auth.token.email &&
+        get(/databases/$(database)/documents/provisionedAccounts/$(data.provisionedAccountId)).data.claimedUid == '' &&
+        getAfter(/databases/$(database)/documents/provisionedAccounts/$(data.provisionedAccountId)).data.claimedUid == request.auth.uid &&
+        data.role == get(/databases/$(database)/documents/provisionedAccounts/$(data.provisionedAccountId)).data.role &&
+        data.status == get(/databases/$(database)/documents/provisionedAccounts/$(data.provisionedAccountId)).data.status &&
+        data.assignedCell == get(/databases/$(database)/documents/provisionedAccounts/$(data.provisionedAccountId)).data.assignedCell &&
+        data.assignedVillage == get(/databases/$(database)/documents/provisionedAccounts/$(data.provisionedAccountId)).data.assignedVillage &&
+        data.teamName == get(/databases/$(database)/documents/provisionedAccounts/$(data.provisionedAccountId)).data.teamName;
+    }
+
+    function isValidAdminMarker(data, userId) {
+      return data.keys().hasAll(['uid', 'grantedAt']) &&
+        data.keys().hasOnly(['uid', 'grantedAt']) &&
+        isValidId(data.uid) &&
+        data.uid == userId &&
+        data.grantedAt is timestamp;
+    }
+
+    function isValidProvisionedAccount(data) {
+      return data.keys().hasAll([
+          'email', 'fullName', 'phone', 'role', 'status',
+          'assignedCell', 'assignedVillage', 'teamName',
+          'claimedUid', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'email', 'fullName', 'phone', 'role', 'status',
+          'assignedCell', 'assignedVillage', 'teamName',
+          'claimedUid', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.email is string && data.email.size() >= 5 && data.email.size() <= 160 &&
+        data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100 &&
+        data.phone is string && data.phone.size() <= 30 &&
+        isValidRole(data.role) &&
+        data.status in ['active', 'inactive'] &&
+        data.assignedCell is string && data.assignedCell.size() <= 80 &&
+        data.assignedVillage is string && data.assignedVillage.size() <= 80 &&
+        data.teamName is string && data.teamName.size() <= 80 &&
+        data.claimedUid is string && data.claimedUid.size() <= 128 &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidStaffDirectoryEntry(data, entryId) {
+      return data.keys().hasAll([
+          'entryId', 'fullName', 'role', 'status', 'assignedCell',
+          'assignedVillage', 'teamName', 'sectorCode', 'isClaimed',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'entryId', 'fullName', 'role', 'status', 'assignedCell',
+          'assignedVillage', 'teamName', 'sectorCode', 'isClaimed',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.entryId) &&
+        data.entryId == entryId &&
+        data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100 &&
+        isValidRole(data.role) &&
+        isValidUserStatus(data.status) &&
+        data.assignedCell is string && data.assignedCell.size() <= 80 &&
+        data.assignedVillage is string && data.assignedVillage.size() <= 80 &&
+        data.teamName is string && data.teamName.size() <= 80 &&
+        data.sectorCode == 'remera' &&
+        data.isClaimed is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll([
+          'title', 'message', 'targetAudience', 'priority',
+          'sectorCode', 'authorId', 'authorName', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'message', 'targetAudience', 'priority',
+          'sectorCode', 'authorId', 'authorName', 'createdAt', 'updatedAt'
+        ]) &&
+        data.title is string && data.title.size() >= 3 && data.title.size() <= 140 &&
+        data.message is string && data.message.size() >= 5 && data.message.size() <= 2000 &&
+        data.targetAudience in ['all', 'team_leaders', 'hso'] &&
+        data.priority in ['normal', 'urgent'] &&
+        data.sectorCode == 'remera' &&
+        isValidId(data.authorId) &&
+        data.authorName is string && data.authorName.size() >= 2 && data.authorName.size() <= 100 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll([
+          'action', 'summary', 'actorId', 'actorName',
+          'actorRole', 'targetEntity', 'sectorCode', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'action', 'summary', 'actorId', 'actorName',
+          'actorRole', 'targetEntity', 'sectorCode', 'createdAt'
+        ]) &&
+        data.action is string && data.action.size() >= 2 && data.action.size() <= 80 &&
+        data.summary is string && data.summary.size() >= 3 && data.summary.size() <= 300 &&
+        isValidId(data.actorId) &&
+        data.actorName is string && data.actorName.size() >= 2 && data.actorName.size() <= 100 &&
+        isValidRole(data.actorRole) &&
+        data.targetEntity is string && data.targetEntity.size() >= 2 && data.targetEntity.size() <= 80 &&
+        data.sectorCode == 'remera' &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidSectorCell(data) {
+      return data.keys().hasAll([
+          'name', 'code', 'villageCount', 'status', 'sectorCode', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'name', 'code', 'villageCount', 'status', 'sectorCode', 'createdAt', 'updatedAt'
+        ]) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 80 &&
+        data.code is string && data.code.size() >= 2 && data.code.size() <= 24 && data.code.matches('^[A-Z0-9_\\-]+$') &&
+        data.villageCount is int && data.villageCount >= 0 && data.villageCount <= 200 &&
+        data.status in ['active', 'inactive'] &&
+        data.sectorCode == 'remera' &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection Rules
+    // -------------------------------------------------------------------------
+
+    // 1. Private User Profiles (PII Isolated to Owner or Admin)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isVerified() && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isValidId(userId) && isVerified() && isValidUser(incoming()) &&
+        incoming().uid == userId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().email == request.auth.token.email &&
+            (
+              // Bootstrapped platform administrator
+              (isBootstrapAdminEmail() && incoming().role == 'admin' && incoming().status == 'active' && incoming().provisionedAccountId == '') ||
+              // Claiming an Admin-provisioned account invite
+              matchesProvisionedAccount(incoming()) ||
+              // Uninvited self-registration must start as pending team_leader
+              (incoming().provisionedAccountId == '' && incoming().role == 'team_leader' && incoming().status == 'pending' && incoming().assignedCell == '' && incoming().assignedVillage == '' && incoming().teamName == '')
+            )
+          )
+        );
+
+      allow update: if isValidId(userId) && isVerified() && isValidUser(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().provisionedAccountId == existing().provisionedAccountId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'fullName', 'phone', 'role', 'status',
+              'assignedCell', 'assignedVillage', 'teamName', 'updatedAt'
+            ])
+          ) ||
+          (
+            isOwner(userId) &&
+            incoming().email == existing().email &&
+            incoming().role == existing().role &&
+            incoming().status == existing().status &&
+            incoming().assignedCell == existing().assignedCell &&
+            incoming().assignedVillage == existing().assignedVillage &&
+            incoming().teamName == existing().teamName &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phone', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isValidId(userId) && isAdmin() && userId != request.auth.uid;
+    }
+
+    // 2. Authoritative Admin Markers
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && isVerified() && (isOwner(userId) || isAdmin());
+      allow list: if false;
+      allow create, update: if isValidId(userId) && isVerified() &&
+        isValidAdminMarker(incoming(), userId) &&
+        incoming().grantedAt == request.time &&
+        (
+          isAdmin() ||
+          (isOwner(userId) && isBootstrapAdminEmail()) ||
+          (
+            isOwner(userId) &&
+            existsAfter(/databases/$(database)/documents/users/$(userId)) &&
+            getAfter(/databases/$(database)/documents/users/$(userId)).data.role == 'admin' &&
+            getAfter(/databases/$(database)/documents/users/$(userId)).data.status == 'active'
+          )
+        );
+      allow delete: if isValidId(userId) && isAdmin() && userId != request.auth.uid;
+    }
+
+    // 3. Provisioned Accounts (Admin pre-registration by email)
+    match /provisionedAccounts/{accountId} {
+      allow get: if isValidId(accountId) && isVerified() &&
+        (isAdmin() || resource == null || resource.data.email == request.auth.token.email);
+      allow list: if isAdmin();
+
+      allow create: if isValidId(accountId) && isAdmin() &&
+        isValidProvisionedAccount(incoming()) &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().claimedUid == '' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(accountId) && isVerified() &&
+        isValidProvisionedAccount(incoming()) &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'fullName', 'phone', 'role', 'status',
+              'assignedCell', 'assignedVillage', 'teamName', 'claimedUid', 'updatedAt'
+            ])
+          ) ||
+          (
+            existing().claimedUid == '' &&
+            existing().email == request.auth.token.email &&
+            incoming().claimedUid == request.auth.uid &&
+            existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            incoming().email == existing().email &&
+            incoming().fullName == existing().fullName &&
+            incoming().phone == existing().phone &&
+            incoming().role == existing().role &&
+            incoming().status == existing().status &&
+            incoming().assignedCell == existing().assignedCell &&
+            incoming().assignedVillage == existing().assignedVillage &&
+            incoming().teamName == existing().teamName &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['claimedUid', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isValidId(accountId) && isAdmin();
+    }
+
+    // 4. Non-PII Staff Directory
+    match /staffDirectory/{entryId} {
+      allow get: if isValidId(entryId) && isActiveStaff();
+      allow list: if isVerified() && resource.data.sectorCode == 'remera' && isActiveStaff();
+
+      allow create: if isValidId(entryId) && isVerified() &&
+        isValidStaffDirectoryEntry(incoming(), entryId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            entryId == request.auth.uid &&
+            incoming().isClaimed == true &&
+            (
+              (isBootstrapAdminEmail() && incoming().role == 'admin' && incoming().status == 'active') ||
+              (incoming().role == 'team_leader' && incoming().status == 'pending' && incoming().assignedCell == '' && incoming().assignedVillage == '' && incoming().teamName == '')
+            )
+          )
+        );
+
+      allow update: if isValidId(entryId) && isVerified() &&
+        isValidStaffDirectoryEntry(incoming(), entryId) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'fullName', 'role', 'status', 'assignedCell',
+              'assignedVillage', 'teamName', 'isClaimed', 'updatedAt'
+            ])
+          ) ||
+          (
+            isOwner(entryId) &&
+            incoming().role == existing().role &&
+            incoming().status == existing().status &&
+            incoming().assignedCell == existing().assignedCell &&
+            incoming().assignedVillage == existing().assignedVillage &&
+            incoming().teamName == existing().teamName &&
+            incoming().isClaimed == existing().isClaimed &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'updatedAt'])
+          ) ||
+          (
+            existing().isClaimed == false &&
+            incoming().isClaimed == true &&
+            exists(/databases/$(database)/documents/provisionedAccounts/$(entryId)) &&
+            get(/databases/$(database)/documents/provisionedAccounts/$(entryId)).data.email == request.auth.token.email &&
+            incoming().fullName == existing().fullName &&
+            incoming().role == existing().role &&
+            incoming().status == existing().status &&
+            incoming().assignedCell == existing().assignedCell &&
+            incoming().assignedVillage == existing().assignedVillage &&
+            incoming().teamName == existing().teamName &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['isClaimed', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isValidId(entryId) && isAdmin();
+    }
+
+    // 5. Sector Announcements
+    match /announcements/{announcementId} {
+      allow get: if isValidId(announcementId) && isActiveStaff();
+      allow list: if isVerified() && resource.data.sectorCode == 'remera' && isActiveStaff();
+
+      allow create: if isValidId(announcementId) && isAdmin() &&
+        isValidAnnouncement(incoming()) &&
+        incoming().authorId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(announcementId) && isAdmin() &&
+        isValidAnnouncement(incoming()) &&
+        incoming().authorId == existing().authorId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'message', 'targetAudience', 'priority', 'updatedAt'
+        ]);
+
+      allow delete: if isValidId(announcementId) && isAdmin();
+    }
+
+    // 6. Immutable Audit Logs
+    match /auditLogs/{logId} {
+      allow get: if isValidId(logId) && isActiveStaff();
+      allow list: if isVerified() && resource.data.sectorCode == 'remera' && isActiveStaff();
+
+      allow create: if isValidId(logId) && isActiveStaff() &&
+        isValidAuditLog(incoming()) &&
+        incoming().actorId == request.auth.uid &&
+        incoming().createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    // 7. Remera Sector Administrative Cells Foundation
+    match /sectorCells/{cellId} {
+      allow get: if isValidId(cellId) && isActiveStaff();
+      allow list: if isVerified() && resource.data.sectorCode == 'remera' && isActiveStaff();
+
+      allow create: if isValidId(cellId) && isAdmin() &&
+        isValidSectorCell(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(cellId) && isAdmin() &&
+        isValidSectorCell(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'code', 'villageCount', 'status', 'updatedAt'
+        ]);
+
+      allow delete: if isValidId(cellId) && isAdmin();
+    }
+  }
+}
